@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eb0a1e">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<title>GR Yaris OBD-II Studio</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--line:#2a313c;--txt:#e6edf3;--mut:#8b949e;--acc:#eb0a1e;--ok:#3fb950;--warn:#d29922}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--txt)}
+header{display:flex;gap:12px;align-items:center;padding:10px 16px;background:var(--card);border-bottom:2px solid var(--acc);flex-wrap:wrap}
+header h1{font-size:17px;margin:0;flex:1}header h1 span{color:var(--acc)}
+button,select,input{background:#21262d;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 12px;font:inherit}
+button{cursor:pointer}button:hover{border-color:var(--acc)}button.p{background:var(--acc);border-color:var(--acc)}
+nav{display:flex;gap:4px;padding:8px 16px;overflow:auto;border-bottom:1px solid var(--line)}
+nav button.on{background:var(--acc);border-color:var(--acc)}
+main{padding:16px;max-width:1300px;margin:auto}section{display:none}section.on{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card .l{color:var(--mut);font-size:12px;display:flex;justify-content:space-between}
+.card .v{font-size:26px;font-weight:600;margin-top:4px}.card .u{font-size:12px;color:var(--mut)}
+.i{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#30363d;color:#fff;font-size:11px;cursor:pointer;border:0;padding:0}
+.i:hover{background:var(--acc)}
+canvas{width:100%;height:240px;background:#0a0e13;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--line);padding:4px;text-align:center}
+td input{width:62px;text-align:center;padding:3px;border:0;background:transparent}
+.warn{background:#3a2c0b;border:1px solid var(--warn);padding:10px;border-radius:8px;margin:10px 0}
+.dtc{display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid var(--line)}
+.dtc b{color:var(--acc);min-width:70px}
+#modal{position:fixed;inset:0;background:#000a;display:none;place-items:center;z-index:9}
+#modal.on{display:grid}#mb{background:var(--card);border:1px solid var(--acc);border-radius:12px;max-width:560px;width:92%;padding:20px;max-height:85vh;overflow:auto}
+#mb h3{margin-top:0;color:var(--acc)}#mb h4{margin:12px 0 2px}#log{font:12px monospace;background:#0a0e13;padding:8px;height:200px;overflow:auto;border-radius:8px;white-space:pre-wrap}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;align-items:center}
+body{padding-top:env(safe-area-inset-top);-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+@media(max-width:820px){
+ body{font-size:16px}
+ header{padding:8px 12px}header h1{flex:1 1 100%;font-size:16px}header h1 small{display:block}
+ header button.p,header #bd,header #bb{flex:1 1 40%;min-height:48px}
+ button,select,input{min-height:48px;font-size:16px}
+ button.i{min-height:30px;width:30px;height:30px;font-size:15px}
+ nav{position:fixed;bottom:0;left:0;right:0;z-index:8;background:var(--card);border-top:2px solid var(--acc);border-bottom:0;padding:6px 6px calc(6px + env(safe-area-inset-bottom));scroll-snap-type:x proximity}
+ nav button{white-space:nowrap;scroll-snap-align:start;min-width:max-content}
+ main{padding:10px 10px calc(90px + env(safe-area-inset-bottom))}
+ .grid{grid-template-columns:repeat(2,1fr)!important}.grid .card .v{font-size:30px}
+ #pl,#cl2,#tps{grid-template-columns:1fr!important}
+ td input{width:54px;min-height:40px;font-size:15px;padding:2px}
+ #mb{width:96%;max-height:80vh}
+}
+@media(display-mode:standalone){header{padding-top:12px}}
+</style>
+</head>
+<body>
+<header>
+ <h1>GR Yaris <span>OBD-II Studio</span> <small style="color:var(--mut)">GXPA16 · G16E-GTS 1,6 l Turbo · MY2022</small></h1>
+ <span id="st" style="color:var(--mut)">● getrennt</span>
+ <button class="p" id="bb">Bluetooth (BLE)</button>
+ <button id="bc">USB / Seriell</button>
+ <button id="bd">Demo-Modus</button>
+ <button class="i" data-h="connect">?</button>
+</header>
+<nav id="nav"></nav>
+<main>
+<section id="dash"><div class="row"><button id="rec">● Aufzeichnen</button><button id="csv">In Datenbank-Tab öffnen</button><button class="i" data-h="rec">?</button><span id="recs" style="color:var(--mut)"></span></div>
+<div class="grid" id="cards"></div><h3>Verlauf</h3><div class="row" id="sel"></div><canvas id="ch" width="1200" height="240"></canvas></section>
+
+<section id="dtc"><div class="row"><button class="p" id="rd">Fehlercodes lesen (Mode 03)</button><button id="rp">Pending (Mode 07)</button><button id="ff">Freeze Frame (Mode 02)</button><button id="cl">Löschen (Mode 04)</button><button class="i" data-h="dtc">?</button></div><div class="card" id="dl">Keine Daten.</div></section>
+
+<section id="info"><div class="row"><button class="p" id="vin">Fahrzeugdaten lesen (Mode 09)</button><button class="i" data-h="vin">?</button></div><div class="card" id="il">Keine Daten.</div>
+<h3>Bereitschaft / Monitore (Mode 01 PID 01)</h3><div class="row"><button id="mon">Lesen</button></div><div class="card" id="ml">–</div></section>
+
+<section id="tune"><div class="warn">⚠ <b>Hinweis:</b> Das Beschreiben des Motorsteuergeräts (Flash) läuft beim GR Yaris über herstellerspezifisches UDS/CAN mit Security-Access und ist über generisches OBD-II/ELM327 <b>nicht</b> möglich. Dieses Modul erstellt, validiert, simuliert und exportiert Tuning-Profile (Offline-Editor) für Ihr Tuning-Tool. Änderungen können Garantie, Zulassung (ABE/TÜV) und Emissionskonformität beeinflussen und den Motor beschädigen.</div>
+<div class="row"><select id="tm"></select><button class="i" id="tmh">?</button><button id="rst">Zurücksetzen (Serie)</button><button id="exj">Profil exportieren (JSON)</button><label><input type="file" id="imj" accept=".json" style="display:none"><span class="p" style="padding:6px 12px;border-radius:6px;cursor:pointer;background:var(--acc)">Profil importieren</span></label></div>
+<div class="row" id="gp"></div>
+<div id="tt" class="card" style="overflow:auto"></div><div id="tchk" class="card" style="margin-top:10px"></div></section>
+
+<section id="par"><div class="warn">⚠ Alle Parameter sind Offline-Werte für das Profil (Export/Datenbank). Abgasrelevante Eingriffe (Katalysator-/GPF-Deaktivierung, Lambda-Sonden-Manipulation, Abschalten der Diagnose) werden bewusst nicht angeboten – sie sind illegal und führen zum Erlöschen der Betriebserlaubnis.</div>
+<div class="row"><button id="prst">Alle Parameter auf Serie</button><span id="pchk" style="color:var(--warn)"></span></div><div class="grid" id="pl" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))"></div></section>
+
+<section id="tpms"><div class="warn">Sensor-IDs werden hier verwaltet (Datenbank). Das Anlernen ins Fahrzeug erfolgt per Initialisierung im Kombiinstrument oder per Techstream. Der Leseversuch erlaubt nur lesende Dienste (22/19).</div>
+<div class="row"><b>Soll-Druck kalt (bar):</b> vorn <input type="number" id="tpf" step="0.1" value="2.3" style="width:70px"> hinten <input type="number" id="tpr" step="0.1" value="2.3" style="width:70px"> Warnschwelle <input type="number" id="tpw" value="20" style="width:60px"> % <button class="i" data-h="tpms">?</button><button class="i" data-h="tpmsi" title="Anleitung">i</button></div>
+<div class="grid" id="tps" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))"></div>
+<div class="row"><button class="p" id="tpsave">Sensor-IDs in Datenbank speichern</button><button id="tpload">Letzten Stand laden</button><span id="tpm" style="color:var(--mut)"></span></div>
+<div class="card"><b>Leseversuch (experimentell)</b><div class="row"><input id="tph" placeholder="Header, z. B. 7C0 (optional)" style="width:200px"><input id="tpc" placeholder="Lesebefehl hex, z. B. 22xxxx" style="flex:1"><button id="tpr2">Senden</button></div><div id="tpo" style="font:12px monospace;white-space:pre-wrap">–</div></div></section>
+
+<section id="cod"><div class="warn">⚠ Jede Funktion kann auf <b>Serie</b>, <b>Aktiv</b> oder <b>Deaktiviert</b> gesetzt werden; die Auswahl wird dauerhaft im Browser gespeichert und ins Profil übernommen. Das Schreiben ins Fahrzeug (Codierung) ist über ELM327 nicht möglich, dafür braucht es ein Codier-Tool (z. B. Techstream). Sicherheitskritische Systeme (Airbag, ABS/ESP-Grundfunktion, Bremsen, Gurtwarnung) werden bewusst nicht angeboten. Deaktivierte Assistenten entbinden nicht von der Sorgfalt; die Zulassung kann betroffen sein.</div>
+<div class="row"><button id="cser">Alle auf Serie</button><button id="coff">Alle Komfort-Assistenten deaktivieren</button><span id="cn" style="color:var(--mut)"></span></div><div class="grid" id="cl2" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))"></div></section>
+
+<section id="db"><div class="warn">Die SQL-Datenbank (SQLite via sql.js) läuft im Browser und wird automatisch lokal (IndexedDB) gespeichert. <span id="dbs">Lade…</span></div>
+<div class="row"><button id="dbx">.sqlite herunterladen</button><label><input type="file" id="dbi" accept=".sqlite,.db" style="display:none"><span style="padding:6px 12px;border:1px solid var(--line);border-radius:6px;cursor:pointer">.sqlite importieren</span></label><button id="dbp">Aktuelles Tuning-Profil speichern</button><button id="dbd">Alles löschen</button><button class="i" data-h="db">?</button></div>
+<div class="row"><select id="qs"><option value="SELECT s.id,datetime(s.started/1000,'unixepoch') AS start,s.mode,COUNT(*) AS werte FROM sessions s JOIN samples m ON m.session_id=s.id GROUP BY s.id ORDER BY s.id DESC">Aufzeichnungen</option><option value="SELECT k,COUNT(*) n,ROUND(MIN(v),2) min,ROUND(AVG(v),2) avg,ROUND(MAX(v),2) max FROM samples GROUP BY k">Statistik je Messwert</option><option value="SELECT t,v AS rpm FROM samples WHERE k='rpm' ORDER BY t DESC LIMIT 50">Letzte Drehzahlwerte</option><option value="SELECT * FROM profiles ORDER BY id DESC">Gespeicherte Profile</option><option value="SELECT * FROM dtc_log ORDER BY id DESC">Fehlercode-Verlauf</option></select><button id="qr">Vorlage laden</button></div>
+<textarea id="sq" rows="4" style="width:100%;background:#0a0e13;color:var(--txt);border:1px solid var(--line);border-radius:8px;font:13px monospace;padding:8px">SELECT * FROM sessions</textarea>
+<div class="row"><button class="p" id="qx">SQL ausführen</button><button id="qc">Als CSV exportieren</button><button id="ql">Profil aus Auswahl laden</button><span id="qm" style="color:var(--mut)"></span></div><div class="card" id="qo" style="overflow:auto;max-height:420px">–</div></section>
+
+<section id="gauge"><div class="card"><h3 style="margin-top:0">Leistungsabschätzung (aus Live-Daten)</h3><div id="pw">Verbinden oder Demo starten.</div><button class="i" data-h="pwr">?</button></div>
+<div class="card" style="margin-top:12px"><h3 style="margin-top:0">Tuning-Funktionen im Überblick</h3><div class="grid" id="fn"></div></div></section>
+
+<section id="term"><div class="row"><input id="cmd" placeholder="AT-/OBD-Befehl, z.B. 010C" style="flex:1"><button id="snd">Senden</button><button class="i" data-h="term">?</button></div><div id="log"></div></section>
+</main>
+<div id="modal"><div id="mb"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<script>
+// ---------- Hilfetexte (Popups) ----------
+const H={
+connect:["Verbindung","<p><b>Android (Chrome):</b> „Bluetooth (BLE)“ mit einem BLE-ELM327 (z. B. Vgate iCar Pro BLE, OBDLink CX, Veepeak BLE) – Bluetooth und Standort einschalten, Adapter nicht vorher in den Android-Einstellungen koppeln. Klassische Bluetooth-Adapter (die meisten Billig-ELM327) funktionieren im Browser nicht; stattdessen BLE-Adapter oder USB-Adapter per OTG über „USB / Seriell“ nutzen.</p><p><b>PC:</b> Chrome/Edge (Web Serial); Baudrate wird automatisch getestet.</p><p>Der <b>Demo-Modus</b> simuliert einen GR Yaris ohne Hardware.</p><p>Zündung an, Motor aus/an. Der OBD-II-Port liegt links unter dem Armaturenbrett. Nur hochwertige Adapter (kein Billig-Klon) verwenden.</p>"],
+dtc:["Fehlercodes (DTC)","<h4>Mode 03</h4>Gespeicherte, bestätigte Fehler.<h4>Mode 07</h4>Ausstehende Fehler (noch nicht bestätigt).<h4>Mode 02</h4>Freeze Frame: Messwerte im Moment des Fehlers.<h4>Mode 04</h4>Löscht Codes, Freeze Frame und Readiness-Monitore – vor HU/AU nicht kurz vorher löschen."],
+vin:["Fahrzeuginfo","Mode 09: VIN (PID 02), Kalibrations-ID (04), CVN (06). Die Kalibrations-ID identifiziert den Softwarestand des Motorsteuergeräts – wichtig, um passende Tuning-Profile zu wählen."],
+pwr:["Leistungsabschätzung","Schätzt Leistung aus Last, Drehzahl und Ladedruck (grobe Näherung, kein Prüfstand). Serie: 192 kW (261 PS), 370 Nm bei 3000–4600/min."],
+term:["Terminal","Direkter Zugriff auf den ELM327. AT-Befehle (ATZ Reset, ATSP0 Auto-Protokoll, ATH1 Header an) und OBD-Hex-Befehle. Nur für Fortgeschrittene."],
+boost:["Ladedruck (Wastegate-Sollwert)","<p>Soll-Ladedruck über Drehzahl und Last. Serie ca. 1,2–1,4 bar Überdruck (Turbo, Dreizylinder). Höhere Werte steigern Drehmoment, erhöhen aber Klopfgefahr, Abgastemperatur und Lader-/Kolbenbelastung.</p><p><b>Limit hier:</b> max. 1,6 bar.</p>"],
+ign:["Zündwinkel","<p>Grad vor OT. Früher = mehr Leistung bis zur Klopfgrenze (MBT). Zu früh: Klopfen, Motorschaden. Bei hohem Ladedruck und Last bewusst konservativ.</p>"],
+afr:["Lambda / Gemischsollwert","<p>Lambda-Soll unter Volllast. 0,80–0,85 (fett) kühlt Brennraum und Turbine. Mager unter Last = Überhitzung. Direkt- und Saugrohreinspritzung (D-4ST) beachten.</p>"],
+rev:["Drehzahlbegrenzer","<p>Serie ca. 7000/min. Höhere Drehzahlen belasten Ventiltrieb und Pleuel. Limit hier: 7200.</p>"],
+tq:["Drehmomentbegrenzung","<p>Maximales Drehmoment je Drehzahl (Nm) zum Schutz von Getriebe (GR-Four, Torsen) und Kupplung. Serie 370 Nm.</p>"],
+fan:["Funktionen","<p>Kurzbeschreibung der Tuning-Funktionen.</p>"],
+rec:["Aufzeichnung","Zeichnet alle Live-Werte mit Zeitstempel auf und exportiert sie als CSV für Analyse (Excel, MegaLogViewer)."]
+};
+const FN=[["Ladedruck-Map","boost"],["Zündwinkel-Map","ign"],["Lambda-Soll","afr"],["Drehzahlbegrenzer","rev"],["Drehmomentlimit","tq"],["Fehlercodes","dtc"],["Aufzeichnung","rec"]];
+const modal=document.getElementById('modal'),mb=document.getElementById('mb');
+function pop(k){const h=H[k]||["Info","–"];mb.innerHTML=`<h3>${h[0]}</h3>${h[1]}<div class="row"><button class="p" onclick="modal.classList.remove('on')">Schließen</button></div>`;modal.classList.add('on')}
+modal.onclick=e=>{if(e.target==modal)modal.classList.remove('on')};
+document.addEventListener('click',e=>{const k=e.target.dataset&&e.target.dataset.h;if(k)pop(k)});
+document.addEventListener('keydown',e=>{if(e.key=='Escape')modal.classList.remove('on')});
+
+// ---------- Navigation ----------
+const tabs=[["dash","Live-Daten"],["dtc","Fehlercodes"],["info","Fahrzeuginfo"],["tune","Tuning-Maps"],["par","Parameter"],["cod","Assistenz & Komfort"],["tpms","Reifendruck (TPMS)"],["db","SQL-Datenbank"],["gauge","Leistung & Funktionen"],["term","Terminal"]];
+const nav=document.getElementById('nav');
+tabs.forEach(([id,n])=>{const b=document.createElement('button');b.textContent=n;b.onclick=()=>show(id);b.id='t_'+id;nav.appendChild(b)});
+function show(id){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==id));tabs.forEach(t=>document.getElementById('t_'+t[0]).classList.toggle('on',t[0]==id))}
+show('dash');
+const $=id=>document.getElementById(id);
+
+// ---------- PIDs ----------
+const P=[
+{k:'rpm',n:'Drehzahl',u:'/min',pid:'010C',f:b=>(b[0]*256+b[1])/4,h:"Motordrehzahl (PID 0C). Redline ca. 7000/min."},
+{k:'spd',n:'Geschwindigkeit',u:'km/h',pid:'010D',f:b=>b[0],h:"Fahrzeuggeschwindigkeit (PID 0D)."},
+{k:'ect',n:'Kühlmitteltemp.',u:'°C',pid:'0105',f:b=>b[0]-40,h:"Kühlmitteltemperatur (PID 05). Normal 85–100 °C."},
+{k:'iat',n:'Ansauglufttemp.',u:'°C',pid:'010F',f:b=>b[0]-40,h:"Temperatur nach Ladeluftkühler (PID 0F). Hohe Werte = Zündwinkelrücknahme."},
+{k:'map',n:'Saugrohrdruck',u:'kPa',pid:'010B',f:b=>b[0],h:"Absolutdruck im Saugrohr (PID 0B). Über 101 kPa = Ladedruck."},
+{k:'baro',n:'Luftdruck',u:'kPa',pid:'0133',f:b=>b[0],h:"Umgebungsdruck (PID 33)."},
+{k:'load',n:'Motorlast',u:'%',pid:'0104',f:b=>b[0]*100/255,h:"Berechnete Last (PID 04)."},
+{k:'thr',n:'Drosselklappe',u:'%',pid:'0111',f:b=>b[0]*100/255,h:"Drosselklappenstellung (PID 11)."},
+{k:'adv',n:'Zündwinkel',u:'° v.OT',pid:'010E',f:b=>b[0]/2-64,h:"Zündzeitpunkt Zylinder 1 (PID 0E)."},
+{k:'maf',n:'Luftmasse',u:'g/s',pid:'0110',f:b=>(b[0]*256+b[1])/100,h:"Luftmassenstrom (PID 10)."},
+{k:'stft',n:'Kurzzeit-Trim',u:'%',pid:'0106',f:b=>b[0]*100/128-100,h:"Kurzzeitige Gemischkorrektur (PID 06)."},
+{k:'ltft',n:'Langzeit-Trim',u:'%',pid:'0107',f:b=>b[0]*100/128-100,h:"Langzeit-Gemischkorrektur (PID 07). Größer ±10 % = Problem."},
+{k:'lam',n:'Lambda',u:'λ',pid:'0144',f:b=>(b[0]*256+b[1])/32768,h:"Lambda-Sollwert (PID 44)."},
+{k:'vlt',n:'Bordspannung',u:'V',pid:'0142',f:b=>(b[0]*256+b[1])/1000,h:"Steuergerätespannung (PID 42)."}
+];
+let live={},hist={},sel=['rpm','map'],mode=null,port,writer,reader,rx='',busy=false,recOn=false,recData=[];
+P.forEach(p=>{hist[p.k]=[];const c=document.createElement('div');c.className='card';c.innerHTML=`<div class="l">${p.n}<button class="i" data-h="pid_${p.k}">?</button></div><div class="v" id="v_${p.k}">–</div><div class="u">${p.u}</div>`;$('cards').appendChild(c);H['pid_'+p.k]=[p.n,`<p>${p.h}</p><p>Befehl: <code>${p.pid}</code></p>`];
+const l=document.createElement('label');l.innerHTML=`<input type="checkbox" ${sel.includes(p.k)?'checked':''} value="${p.k}"> ${p.n}`;l.firstChild.onchange=e=>{sel=[...document.querySelectorAll('#sel input:checked')].map(x=>x.value)};$('sel').appendChild(l)});
+FN.forEach(([n,k])=>{const c=document.createElement('div');c.className='card';c.innerHTML=`<div class="l">${n}<button class="i" data-h="${k}">?</button></div>`;$('fn').appendChild(c)});
+
+// ---------- Logging ----------
+function log(s){const l=$('log');l.textContent+=s+'\n';l.scrollTop=l.scrollHeight}
+function status(t,c){$('st').textContent='● '+t;$('st').style.color=c}
+
+// ---------- Transport ----------
+async function sendRaw(cmd){
+ if(mode=='demo')return demo(cmd);
+ log('> '+cmd);rx='';await txw(cmd+'\r');
+ const t0=Date.now();
+ while(!rx.includes('>')){if(Date.now()-t0>4000)break;await new Promise(r=>setTimeout(r,15))}
+ const r=rx.replace(/>/g,'').trim();log(r);return r;
+}
+async function q(cmd){while(busy)await new Promise(r=>setTimeout(r,20));busy=true;try{return await sendRaw(cmd)}finally{busy=false}}
+function bytes(resp,pre){const out=[];resp.split(/[\r\n]+/).forEach(l=>{l=l.replace(/\s/g,'').toUpperCase();if(l.startsWith(pre)&&/^[0-9A-F]+$/.test(l)){const h=l.slice(pre.length);for(let i=0;i<h.length;i+=2)out.push(parseInt(h.substr(i,2),16))}});return out}
+let txw=d=>writer.write(new TextEncoder().encode(d)),wake=null;
+async function keepAwake(){try{wake=await navigator.wakeLock.request('screen')}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible'&&mode)keepAwake()});
+const BLE_SVC=['0000fff0-0000-1000-8000-00805f9b34fb','0000ffe0-0000-1000-8000-00805f9b34fb','000018f0-0000-1000-8000-00805f9b34fb','e7810a71-73ae-499d-8c15-faa9aef0c3f2'];
+$('bb').onclick=async()=>{
+ if(!navigator.bluetooth)return alert('Web Bluetooth wird nicht unterstützt. Bitte Chrome auf Android verwenden und Bluetooth/Standort aktivieren.');
+ try{const dev=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:BLE_SVC});
+  const srv=await dev.gatt.connect();let wc,nc;
+  for(const s of await srv.getPrimaryServices())for(const c of await s.getCharacteristics()){if(c.properties.notify&&!nc)nc=c;if((c.properties.write||c.properties.writeWithoutResponse)&&!wc)wc=c}
+  if(!nc||!wc)throw new Error('Keine passende BLE-Schnittstelle gefunden (Adapter muss BLE unterstützen, kein Bluetooth Classic).');
+  await nc.startNotifications();nc.addEventListener('characteristicvaluechanged',e=>{rx+=new TextDecoder().decode(e.target.value)});
+  txw=async s=>{const d=new TextEncoder().encode(s);for(let i=0;i<d.length;i+=20){const p=d.slice(i,i+20);if(wc.properties.writeWithoutResponse)await wc.writeValueWithoutResponse(p);else await wc.writeValue(p)}};
+  dev.addEventListener('gattserverdisconnected',()=>{mode=null;status('getrennt','#8b949e')});
+  mode='real';const r=await q('ATZ');if(!/ELM/i.test(r))await q('ATZ');
+  await q('ATE0');await q('ATL0');await q('ATSP0');await q('0100');keepAwake();start('BLE verbunden','#3fb950');
+ }catch(e){mode=null;alert('Verbindung fehlgeschlagen: '+e.message)}};
+$('bc').onclick=async()=>{
+ if(!('serial' in navigator))return alert('Web Serial wird nicht unterstützt. Bitte Chrome/Edge verwenden.');
+ txw=d=>writer.write(new TextEncoder().encode(d));
+ try{port=await navigator.serial.requestPort();
+ for(const baud of [38400,115200,9600]){
+  await port.open({baudRate:baud});writer=port.writable.getWriter();reader=port.readable.getReader();
+  (async()=>{try{for(;;){const{value,done}=await reader.read();if(done)break;rx+=new TextDecoder().decode(value)}}catch(e){}})();
+  mode='real';const r=await q('ATZ');
+  if(/ELM/i.test(r)){await q('ATE0');await q('ATL0');await q('ATSP0');const t=await q('0100');log(t);start('ELM327 verbunden','#3fb950');return}
+  mode=null;reader.cancel();writer.releaseLock();await port.close();
+ }alert('Kein ELM327 gefunden.')}catch(e){alert('Verbindung fehlgeschlagen: '+e.message)}};
+$('bd').onclick=()=>{mode='demo';start('Demo-Modus','#d29922')};
+let timer;function start(t,c){status(t,c);clearInterval(timer);poll()}
+async function poll(){
+ if(!mode)return;
+ for(const p of P){if(!mode)return;
+  const r=await q(p.pid);const b=bytes(r,'41'+p.pid.slice(2));
+  if(b.length){const v=p.f(b);live[p.k]=v;hist[p.k].push(v);if(hist[p.k].length>300)hist[p.k].shift();$('v_'+p.k).textContent=v.toFixed(p.k=='lam'||p.k=='vlt'?2:0)}}
+ if(recOn){recData.push(1);dbInsert();$('recs').textContent=recData.length+' Messzyklen in DB'}
+ draw();power();setTimeout(poll,mode=='demo'?150:0);
+}
+let sid=null;
+$('rec').onclick=()=>{if(!DB)return alert('Datenbank nicht verfügbar (sql.js konnte nicht geladen werden).');recOn=!recOn;$('rec').textContent=recOn?'■ Stopp':'● Aufzeichnen';
+ if(recOn){DB.run('INSERT INTO sessions(started,mode) VALUES(?,?)',[Date.now(),mode||'-']);sid=DB.exec('SELECT last_insert_rowid()')[0].values[0][0];recData=[]}else saveDB()};
+function dbInsert(){if(!DB||!sid)return;const t=Date.now();DB.run('BEGIN');const st=DB.prepare('INSERT INTO samples(session_id,t,k,v) VALUES(?,?,?,?)');
+ for(const k in live)st.run([sid,t,k,live[k]]);st.free();DB.run('COMMIT');if(recData.length%50==0)saveDB()}
+$('csv').onclick=()=>show('db');
+function dl(n,t){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t]));a.download=n;a.click()}
+
+// ---------- Diagramm ----------
+function draw(){const c=$('ch'),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);const cols=['#eb0a1e','#58a6ff','#3fb950','#d29922','#bc8cff','#39c5cf'];
+ sel.forEach((k,i)=>{const d=hist[k];if(d.length<2)return;const mn=Math.min(...d),mx=Math.max(...d)||1,rg=(mx-mn)||1;x.strokeStyle=cols[i%6];x.beginPath();d.forEach((v,j)=>{const X=j/299*c.width,Y=c.height-10-(v-mn)/rg*(c.height-20);j?x.lineTo(X,Y):x.moveTo(X,Y)});x.stroke();x.fillStyle=cols[i%6];x.fillText(`${P.find(p=>p.k==k).n}: ${mn.toFixed(0)}–${mx.toFixed(0)}`,8,14+i*14)})}
+function power(){const r=live.rpm,l=live.load;if(r==null)return;const boost=((live.map||101)-(live.baro||101))/100;
+ const tq=Math.min(370,(l||0)*3.7*(r>1800?1:r/1800));const kw=tq*r/9549;
+ $('pw').innerHTML=`Drehmoment ≈ <b>${tq.toFixed(0)} Nm</b> · Leistung ≈ <b>${kw.toFixed(0)} kW / ${(kw*1.36).toFixed(0)} PS</b> · Ladedruck ≈ <b>${boost.toFixed(2)} bar</b>`}
+
+// ---------- DTC ----------
+const dtcDB={P0299:"Turbolader Unterladung",P0234:"Turbolader Überladung",P0325:"Klopfsensor Kreis 1",P0300:"Zufällige Fehlzündungen",P0301:"Fehlzündung Zyl. 1",P0302:"Fehlzündung Zyl. 2",P0303:"Fehlzündung Zyl. 3",P0171:"Gemisch zu mager (Bank 1)",P0172:"Gemisch zu fett (Bank 1)",P0420:"Katalysator Wirkungsgrad",P0087:"Kraftstoffdruck zu niedrig",P0016:"Nockenwelle/Kurbelwelle Korrelation"};
+function dtcName(b1,b2){const t='PCBU'[b1>>6],c=(b1>>4)&3;return t+c+(b1&15).toString(16)+b2.toString(16).padStart(2,'0').toUpperCase()}
+async function readDtc(m){const r=await q(m);const b=bytes(r,m=='03'?'43':'47');const out=[];for(let i=0;i+1<b.length;i+=2)if(b[i]||b[i+1])out.push(dtcName(b[i],b[i+1]));
+ $('dl').innerHTML=out.length?out.map(c=>`<div class="dtc"><b>${c}</b><span style="flex:1">${dtcDB[c]||'Herstellerspezifisch/unbekannt'}</span><button class="i" data-h="d_${c}">?</button></div>`).join(''):'<span style="color:var(--ok)">Keine Fehlercodes.</span>';
+ out.forEach(c=>{if(DB)DB.run('INSERT INTO dtc_log(t,code,descr) VALUES(?,?,?)',[Date.now(),c,dtcDB[c]||''])});if(out.length)saveDB();
+ out.forEach(c=>H['d_'+c]=[c,`<p>${dtcDB[c]||'Kein Eintrag in der Datenbank.'}</p><p>Ursachen prüfen, Fehler beheben, dann löschen. Nach Tuning-Änderungen treten oft ${'P0299/P0234/P0325'} auf.</p>`])}
+$('rd').onclick=()=>readDtc('03');$('rp').onclick=()=>readDtc('07');
+$('cl').onclick=async()=>{if(confirm('Fehler löschen? Readiness-Monitore werden zurückgesetzt.')){await q('04');$('dl').textContent='Gelöscht.'}};
+$('ff').onclick=async()=>{const r=await q('020C00');$('dl').textContent='Freeze Frame Rohdaten: '+r};
+$('vin').onclick=async()=>{const v=await q('0902');const b=bytes(v,'4902').filter(x=>x>31);const ca=await q('0904');
+ const vin=String.fromCharCode(...b.slice(-17));$('il').innerHTML=`<p>VIN: <b>${vin}</b></p><p>Kalibrations-ID (roh): ${ca}</p>`};
+$('mon').onclick=async()=>{const r=await q('0101');const b=bytes(r,'4101');$('ml').innerHTML=b.length?`MIL: <b>${b[0]&128?'AN':'AUS'}</b> · Fehleranzahl: <b>${b[0]&127}</b>`:'Keine Antwort'};
+$('snd').onclick=async()=>{if(!mode)return alert('Nicht verbunden');const v=$('cmd').value.trim();if(v){log('> '+v);const r=await q(v);if(mode=='demo')log(r)}};
+
+// ---------- Demo ----------
+let dt=0;
+function demo(cmd){dt+=.02;const rpm=3000+2500*Math.sin(dt),ld=55+35*Math.sin(dt);const pid=cmd.slice(2);
+ const h2=v=>{v=Math.round(v);return(v>>8&255).toString(16).padStart(2,'0')+(v&255).toString(16).padStart(2,'0')},h1=v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0');
+ const m={'0C':()=>'410C'+h2(rpm*4),'0D':()=>'410D'+h1(rpm/45),'05':()=>'4105'+h1(90+40),'0F':()=>'410F'+h1(35+40),'0B':()=>'410B'+h1(101+ld*1.3),'33':()=>'413365','04':()=>'4104'+h1(ld*2.55),'11':()=>'4111'+h1(ld*2.55),'0E':()=>'410E'+h1((24-ld/10)*2+128),'10':()=>'4110'+h2(rpm*ld/300),'06':()=>'4106'+h1(128),'07':()=>'4107'+h1(130),'44':()=>'4144'+h2(28000),'42':()=>'4142'+h2(14100)};
+ if(cmd=='03')return Promise.resolve('43 01 00 03 00 00 00');
+ if(cmd=='07')return Promise.resolve('47 00 00');
+ if(cmd=='04')return Promise.resolve('44');
+ if(cmd=='0101')return Promise.resolve('41 01 81 07 E5 00');
+ if(cmd=='0902')return Promise.resolve('49 02 01 '+[...'JTDAAAAA0N0123456'].map(c=>c.charCodeAt(0).toString(16)).join(' '));
+ if(cmd=='0904')return Promise.resolve('49 04 01 47 52 59 41 52 49 53');
+ if(cmd.startsWith('01')&&m[pid])return Promise.resolve(m[pid]());
+ return new Promise(r=>setTimeout(()=>r('OK'),50));}
+
+// ---------- Tuning-Maps ----------
+const RPM=[1500,2500,3500,4500,5500,6500],LOAD=[20,40,60,80,100];
+const MAPS={
+boost:{n:'Ladedruck-Soll',u:'bar',min:0,max:1.6,rd:2,rows:RPM,cols:LOAD,data:[[0,0,.3,.6,.8],[0,.2,.7,1.1,1.3],[0,.3,.9,1.3,1.4],[0,.3,.9,1.3,1.4],[0,.3,.9,1.2,1.3],[0,.2,.8,1.1,1.2]],h:'boost'},
+ign:{n:'Zündwinkel',u:'° v.OT',min:-5,max:40,rd:1,rows:RPM,cols:LOAD,data:[[34,30,24,16,12],[36,32,26,18,14],[36,33,27,19,15],[35,32,26,19,15],[34,31,25,18,14],[33,30,24,17,13]],h:'ign'},
+afr:{n:'Lambda-Soll',u:'λ',min:.75,max:1.1,rd:2,rows:RPM,cols:LOAD,data:[[1,1,1,.9,.85],[1,1,1,.88,.84],[1,1,.95,.85,.82],[1,1,.92,.84,.82],[1,1,.9,.83,.82],[1,1,.9,.82,.80]],h:'afr'},
+tq:{n:'Drehmomentlimit',u:'Nm',min:150,max:420,rd:0,rows:RPM,cols:['Gang 1-2','Gang 3-4','Gang 5-6'],data:[[300,330,340],[360,370,370],[370,370,370],[370,370,370],[370,370,360],[340,350,350]],h:'tq'},
+rev:{n:'Drehzahlbegrenzer',u:'/min',min:6000,max:7200,rd:0,rows:['Begrenzer'],cols:['Warm','Kalt'],data:[[7000,6000]],h:'rev'}};
+const def=JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(MAPS).map(([k,v])=>[k,v.data]))));
+Object.keys(MAPS).forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=MAPS[k].n;$('tm').appendChild(o)});
+function render(){const k=$('tm').value,m=MAPS[k];H.tm=H[m.h];
+ let h=`<table><tr><th>${m.n} [${m.u}]</th>${m.cols.map(c=>`<th>${typeof c=='number'?c+' %':c}</th>`).join('')}</tr>`;
+ m.rows.forEach((r,i)=>{h+=`<tr><th>${typeof r=='number'?r+' /min':r}</th>`+m.cols.map((c,j)=>`<td><input type="number" step="${m.rd>1?.01:1}" data-i="${i}" data-j="${j}" value="${m.data[i][j]}"></td>`).join('')+'</tr>'});
+ $('tt').innerHTML=h+'</table>';$('tt').querySelectorAll('input').forEach(e=>e.oninput=()=>{m.data[e.dataset.i][e.dataset.j]=+e.value;check()});check()}
+function check(){const iss=[];Object.entries(MAPS).forEach(([k,m])=>m.data.forEach((r,i)=>r.forEach((v,j)=>{if(v<m.min||v>m.max)iss.push(`${m.n} [${i+1},${j+1}] = ${v} außerhalb ${m.min}–${m.max}`)})));
+ const b=MAPS.boost.data.flat(),mxb=Math.max(...b),inc=(mxb/1.35-1)*100,tqmax=Math.max(...MAPS.tq.data.flat());
+ if(MAPS.afr.data.some((r,i)=>r.some((v,j)=>v>.9&&MAPS.boost.data[i][j]>1.0)))iss.push('Mageres Gemisch (λ>0,9) bei hohem Ladedruck – Überhitzungsgefahr');
+ if(mxb>1.4&&MAPS.ign.data.some((r,i)=>r.some((v,j)=>v>20&&MAPS.boost.data[i][j]>1.3)))iss.push('Zündwinkel >20° bei Ladedruck >1,3 bar – Klopfgefahr');
+ $('tchk').innerHTML=`<b>Plausibilitätsprüfung</b><br>Max. Ladedruck: ${mxb.toFixed(2)} bar (${inc>=0?'+':''}${inc.toFixed(0)} % ggü. Serie) · max. Drehmoment: ${tqmax} Nm<br>`+(iss.length?iss.map(s=>`<div style="color:var(--warn)">⚠ ${s}</div>`).join(''):'<span style="color:var(--ok)">✓ Keine Probleme erkannt</span>')}
+$('tm').onchange=render;$('tmh').onclick=()=>pop($('tm').value in H?$('tm').value:'boost');
+$('tmh').onclick=()=>pop(MAPS[$('tm').value].h);
+$('rst').onclick=()=>{Object.keys(MAPS).forEach(k=>MAPS[k].data=JSON.parse(JSON.stringify(def[k])));render()};
+$('exj').onclick=()=>dl('gryaris_profil.json',JSON.stringify(profile(),null,1));
+$('imj').onchange=async e=>{try{loadProfile(JSON.parse(await e.target.files[0].text()))}catch(x){alert('Ungültiges Profil')}};
+render();
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// ---------- Zusätzliche Maps ----------
+Object.assign(MAPS,{
+pedal:{n:'Gaspedal-Kennfeld (Drosselklappe)',u:'% Drossel',min:0,max:100,rd:0,rows:['Normal','Sport','Track'],cols:[20,40,60,80,100].map(x=>x+' % Pedal'),data:[[14,32,52,74,100],[20,42,64,86,100],[26,50,72,92,100]],h:'pedal'},
+vvt:{n:'Nockenwellenverstellung (VVT-i Einlass)',u:'° KW',min:0,max:50,rd:0,rows:RPM,cols:LOAD,data:[[0,5,10,15,15],[5,12,22,28,25],[10,20,30,35,30],[10,18,28,32,28],[5,12,20,24,20],[0,6,12,15,12]],h:'vvt'},
+inj:{n:'Einspritzmenge-Korrektur',u:'%',min:-15,max:15,rd:1,rows:RPM,cols:LOAD,data:RPM.map(()=>LOAD.map(()=>0)),h:'inj'},
+knock:{n:'Klopfregelung max. Zündrücknahme',u:'° KW',min:0,max:15,rd:1,rows:RPM,cols:LOAD,data:RPM.map(()=>LOAD.map(()=>8)),h:'knock'}});
+Object.assign(H,{
+pedal:["Gaspedal-Kennfeld","<p>Verhältnis Pedalstellung zu Drosselklappenöffnung je Fahrmodus (Normal/Sport/Track). Steiler = direkteres Ansprechen. Kein Leistungsgewinn, verändert nur das Gefühl.</p>"],
+vvt:["VVT-i Einlass-Nockenwelle","<p>Verstellwinkel der Einlassnockenwelle. Beeinflusst Füllung, Drehmomentverlauf, Restgas und Emissionen. Falsche Werte können Ventil-Kolben-Kontakt-Risiko erhöhen und Fehler P0011/P0016 auslösen.</p>"],
+inj:["Einspritzmengen-Korrektur","<p>Prozentuale Korrektur der Einspritzmenge je Betriebspunkt, additiv zur Lambda-Regelung. Positive Werte = mehr Kraftstoff. Hohe Abweichungen überfordern die Trim-Regelung und die Einspritzventile.</p>"],
+knock:["Klopfregelung","<p>Maximal erlaubte Zündwinkelrücknahme bei Klopfen. Niedriger = weniger Schutz. <b>Nie</b> auf 0 setzen, wenn Zündwinkel/Ladedruck erhöht wurden.</p>"],
+db:["SQL-Datenbank","<p>SQLite im Browser. Tabellen: <code>sessions</code>(id,started,mode,note), <code>samples</code>(session_id,t,k,v), <code>profiles</code>(id,name,created,json), <code>dtc_log</code>(id,t,code,descr). Eigene SELECT-Abfragen sind möglich. Die Datenbank liegt lokal im Browser (IndexedDB); über den Download erhältst du eine echte .sqlite-Datei.</p>"],
+par:["Parameter","<p>Einzelwerte und Schalter des Profils.</p>"]});
+const PAR=[
+{id:'vmax',g:'Fahrzeug',n:'Höchstgeschwindigkeits-Begrenzer',u:'km/h',def:230,min:180,max:280,step:1,d:'Elektronische Vmax-Begrenzung. Reifen-Geschwindigkeitsindex und Fahrwerk beachten; Anpassung ist nur auf Privatgelände/Rennstrecke zulässig.'},
+{id:'launch',g:'Fahrdynamik',n:'Launch Control',t:'b',def:0,d:'Haltet Drehzahl beim Anfahren konstant. Hohe Belastung für Kupplung und Antriebsstrang (Torsen, Differenziale).'},
+{id:'launchrpm',g:'Fahrdynamik',n:'Launch-Drehzahl',u:'/min',def:4000,min:2500,max:6000,step:50,d:'Zieldrehzahl bei aktivierter Launch Control.'},
+{id:'ffs',g:'Fahrdynamik',n:'Flat-Foot-Shifting (Schalten ohne Gas lupfen)',t:'b',def:0,d:'Zündungsunterbrechung beim Schalten bei Volllast. Sehr hohe Belastung für Getriebe.'},
+{id:'revmatch',g:'Fahrdynamik',n:'Zwischengas (Rev-Matching)',t:'b',def:1,d:'Automatisches Zwischengas beim Herunterschalten.'},
+{id:'shiftcut',g:'Fahrdynamik',n:'Momentenreduktion beim Schalten',u:'ms',def:150,min:50,max:300,step:10,d:'Dauer der Drehmomentreduktion beim Schalten. Kürzer = schnelleres Schalten, höherer Synchron-Verschleiß.'},
+{id:'splitN',g:'GR-Four',n:'Antriebsmoment vorn – Normal',u:'% vorn',def:60,min:30,max:70,step:5,d:'Verteilung Vorderachse zu Hinterachse (Serie 60:40).'},
+{id:'splitS',g:'GR-Four',n:'Antriebsmoment vorn – Sport',u:'% vorn',def:30,min:30,max:70,step:5,d:'Serie 30:70 (heckbetont).'},
+{id:'splitT',g:'GR-Four',n:'Antriebsmoment vorn – Track',u:'% vorn',def:50,min:30,max:70,step:5,d:'Serie 50:50.'},
+{id:'idle',g:'Motor',n:'Leerlaufdrehzahl (warm)',u:'/min',def:1100,min:900,max:1400,step:25,d:'Leerlauf-Solldrehzahl nach Warmlauf. Zu niedrig: Absterbe-Risiko, zu hoch: Verbrauch/Lärm.'},
+{id:'idlecold',g:'Motor',n:'Leerlauf-Anhebung Kaltstart',u:'/min',def:300,min:0,max:600,step:25,d:'Zusätzliche Drehzahl bis zum Katalysator-Aufheizen.'},
+{id:'dfco',g:'Motor',n:'Schubabschaltung ab',u:'/min',def:1400,min:1000,max:2500,step:50,d:'Drehzahl, unter der die Einspritzung im Schub wieder einsetzt. Beeinflusst Verbrauch und Fahrbarkeit.'},
+{id:'rail',g:'Motor',n:'Hochdruck-Kraftstoff max.',u:'bar',def:200,min:150,max:220,step:5,d:'Maximaler Raildruck der Direkteinspritzung. Zu hoch belastet Hochdruckpumpe und Injektoren.'},
+{id:'obcut',g:'Schutz',n:'Overboost-Abschaltung (absolut)',u:'kPa',def:230,min:200,max:280,step:5,d:'Über diesem Absolutdruck wird die Leistung reduziert. Höher = weniger Schutz.'},
+{id:'knockth',g:'Schutz',n:'Klopf-Empfindlichkeit',u:'%',def:100,min:80,max:120,step:1,d:'Schwelle der Klopferkennung. Höher = empfindlicher = mehr Schutz.'},
+{id:'iatstart',g:'Schutz',n:'Zündrücknahme ab Ansauglufttemperatur',u:'°C',def:50,min:35,max:70,step:1,d:'Ab dieser Temperatur nach dem Ladeluftkühler wird Zündwinkel/Ladedruck reduziert.'},
+{id:'ectderate',g:'Schutz',n:'Leistungsreduktion ab Kühlmitteltemp.',u:'°C',def:110,min:100,max:120,step:1,d:'Ab dieser Temperatur wird die Leistung reduziert.'},
+{id:'egt',g:'Schutz',n:'Abgastemperatur-Limit (berechnet)',u:'°C',def:950,min:850,max:980,step:5,d:'Maximale modellierte Turbinentemperatur. Höher = Turbolader-Risiko.'},
+{id:'fanon',g:'Kühlung',n:'Lüfter EIN',u:'°C',def:98,min:88,max:105,step:1,d:'Kühlmitteltemperatur für Lüfter-Start. Niedriger = kühler Motor, mehr Stromverbrauch.'},
+{id:'fanoff',g:'Kühlung',n:'Lüfter AUS',u:'°C',def:92,min:85,max:100,step:1,d:'Abschalttemperatur. Muss unter „Lüfter EIN“ liegen.'},
+{id:'valve',g:'Sound',n:'Auspuffklappe öffnet ab',u:'/min',def:3000,min:1500,max:5000,step:100,d:'Drehzahl, ab der die Auspuffklappe aufmacht (falls verbaut). Beachte Geräuschgrenzwerte.'},
+{id:'rev_p',g:'Fahrzeug',n:'Drehzahlbegrenzer (siehe Map)',t:'b',def:1,d:'Hinweis: Wert wird in der Map „Drehzahlbegrenzer“ eingestellt.',skip:1}].filter(p=>!p.skip);
+const params={};PAR.forEach(p=>params[p.id]=p.def);
+(function(){let g='';PAR.forEach(p=>{H['p_'+p.id]=[p.n,`<p>${p.d}</p><p>Serie: <b>${p.t=='b'?(p.def?'AN':'AUS'):p.def+' '+p.u}</b>${p.t=='b'?'':` · Bereich: ${p.min}–${p.max}`}</p>`];
+ if(p.g!=g){g=p.g;const h=document.createElement('h3');h.style.cssText='grid-column:1/-1;margin:8px 0 0';h.textContent=g;$('pl').appendChild(h)}
+ const c=document.createElement('div');c.className='card';c.innerHTML=`<div class="l">${p.n}<button class="i" data-h="p_${p.id}">?</button></div><div style="margin-top:8px">`+(p.t=='b'?`<label><input type="checkbox" id="pp_${p.id}"> aktiv</label>`:`<input type="number" id="pp_${p.id}" min="${p.min}" max="${p.max}" step="${p.step}" style="width:100px"> ${p.u}`)+'</div>';$('pl').appendChild(c)})})();
+function parRender(){PAR.forEach(p=>{const e=$('pp_'+p.id);if(p.t=='b')e.checked=!!params[p.id];else e.value=params[p.id];e.onchange=()=>{params[p.id]=p.t=='b'?(e.checked?1:0):+e.value;parCheck()}});parCheck()}
+function parCheck(){const m=[];PAR.forEach(p=>{if(p.t!='b'&&(params[p.id]<p.min||params[p.id]>p.max))m.push(p.n+' außerhalb des Bereichs')});
+ if(params.fanoff>=params.fanon)m.push('Lüfter AUS muss unter Lüfter EIN liegen');if(params.launch&&params.launchrpm>5500)m.push('Launch-Drehzahl sehr hoch');
+ if(params.knockth<95)m.push('Klopf-Empfindlichkeit reduziert – weniger Motorschutz');$('pchk').textContent=m.join(' · ')}
+$('prst').onclick=()=>{PAR.forEach(p=>params[p.id]=p.def);parRender()};
+const COD=[
+['Start-Stopp-Automatik','Motor','Schaltet den Motor an der Ampel ab. Deaktivieren schont Anlasser und Batterie, erhöht den Verbrauch geringfügig.'],
+['Spurhalteassistent (LTA – Lenkunterstützung)','Assistenz','Lenkeingriffe zum Halten der Spur. Aus: keine Korrekturlenkung.'],
+['Spurverlassenswarnung (LDA)','Assistenz','Warnt (Ton/Anzeige) beim Verlassen der Spur.'],
+['Verkehrszeichenerkennung (RSA)','Assistenz','Zeigt erkannte Schilder im Display an.'],
+['RSA-Geschwindigkeitswarnton','Assistenz','Signalton bei Überschreiten des erkannten Tempolimits.'],
+['Automatisches Fernlicht (AHB)','Licht','Schaltet Fernlicht automatisch.'],
+['Müdigkeitswarnung','Assistenz','Warnung bei erkannten Lenkmustern, die auf Müdigkeit hindeuten.'],
+['Abstandsregeltempomat (DRCC) – Komfortfunktion','Assistenz','Radargestützter Tempomat. Die Pre-Collision-Notbremsung bleibt unabhängig davon aktiv.'],
+['Parkpiepser (Intelligent Clearance Sonar) Ton','Komfort','Akustische Warnung beim Einparken.'],
+['Willkommens-/Abschiedslicht (Welcome/Follow-me-home)','Licht','Lichtfunktionen beim Auf-/Abschließen.'],
+['Automatisches Verriegeln beim Fahren (ab 20 km/h)','Komfort','Zentralverriegelung beim Losfahren.'],
+['Automatisches Entriegeln bei Zündung aus','Komfort','Türen entriegeln bei Motorstopp.'],
+['Spiegel automatisch anklappen','Komfort','Beim Verriegeln.'],
+['Tagfahrlicht','Licht','Zulassungsrelevant, in der EU Pflicht – Abschalten nicht empfohlen.'],
+['Scheibenwischer-Nachwischer','Komfort','Zusatzwischer nach dem Waschen.'],
+['Warnton Fahrzeug-Annäherung (Rückwärtsgang-Piepser)','Komfort','Akustik beim Rückwärtsfahren.'],
+['Launch-Control-Freigabe (Track-Modus)','Fahrdynamik','Freigabe der Launch-Funktion.'],
+['Track-Modus: ESP-Schwellen gelockert','Fahrdynamik','Spätere ESP-Eingriffe im Track-Modus. Grundfunktion bleibt aktiv.']
+];
+const cod={};COD.forEach(c=>cod[c[0]]='serie');
+try{Object.assign(cod,JSON.parse(localStorage.getItem('gr_cod')||'{}'))}catch(e){}
+function codSave(){localStorage.setItem('gr_cod',JSON.stringify(cod));const n=Object.values(cod).filter(v=>v!='serie').length;$('cn').textContent=n+' Funktion(en) geändert · dauerhaft gespeichert'}
+function codRender(){$('cl2').innerHTML='';COD.forEach((c,i)=>{H['c_'+i]=[c[0],`<p>${c[2]}</p><p>Kategorie: ${c[1]}</p><p>Serie: unverändert. <b>Aktiv/Deaktiviert</b> wird dauerhaft im Profil gespeichert.</p>`];
+ const d=document.createElement('div');d.className='card';d.innerHTML=`<div class="l">${c[0]}<button class="i" data-h="c_${i}">?</button></div><div class="u" style="margin:4px 0">${c[1]}</div><select>${['serie','aktiv','aus'].map(v=>`<option value="${v}" ${cod[c[0]]==v?'selected':''}>${{serie:'Serie',aktiv:'Aktiv',aus:'Deaktiviert'}[v]}</option>`).join('')}</select>`;
+ d.querySelector('select').onchange=e=>{cod[c[0]]=e.target.value;codSave()};$('cl2').appendChild(d)});codSave()}
+$('cser').onclick=()=>{COD.forEach(c=>cod[c[0]]='serie');codRender()};
+$('coff').onclick=()=>{COD.filter(c=>['Assistenz','Komfort'].includes(c[1])).forEach(c=>cod[c[0]]='aus');codRender()};
+codRender();
+function profile(){return{vehicle:'Toyota GR Yaris GXPA16 MY2022',maps:Object.fromEntries(Object.entries(MAPS).map(([k,v])=>[k,v.data])),params,coding:cod}}
+function loadProfile(j){const m=j.maps||j;Object.keys(MAPS).forEach(k=>{if(m[k])MAPS[k].data=m[k]});if(j.params)Object.assign(params,j.params);if(j.coding){Object.assign(cod,j.coding);codRender()}render();parRender()}
+const defAll=JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(MAPS).map(([k,v])=>[k,v.data]))));
+Object.keys(MAPS).forEach(k=>{if(![...$('tm').options].some(o=>o.value==k)){const o=document.createElement('option');o.value=k;o.textContent=MAPS[k].n;$('tm').appendChild(o)}});
+$('rst').onclick=()=>{Object.keys(MAPS).forEach(k=>MAPS[k].data=JSON.parse(JSON.stringify(defAll[k])));PAR.forEach(p=>params[p.id]=p.def);render();parRender()};
+parRender();
+
+// ---------- TPMS ----------
+Object.assign(H,{
+tpms:["Reifendruck (TPMS)","<p>Direktes System: Sensoren im Rad senden ID, Druck und Temperatur per Funk. Generisches OBD-II enthält keine TPMS-Werte. Soll-Druck laut Türrahmen-Aufkleber. Warnung typisch bei ca. 20 % Druckverlust.</p>"],
+tpmsi:["Anlernen neuer Sensoren","<ol><li>Reifendruck aller Reifen auf Soll (kalt) bringen.</li><li>Zündung EIN, im Kombiinstrument unter Einstellungen/Fahrzeug die Reifendruck-Initialisierung starten (Menüführung laut Bedienungsanleitung).</li><li>Mehrere Minuten über ca. 40 km/h fahren, bis die Warnleuchte erlischt.</li><li>Alternativ: Sensor-IDs per Techstream registrieren.</li></ol><p>Bei Radwechsel Sommer/Winter ggf. jeweils neu initialisieren, wenn die Sensor-IDs nicht registriert sind.</p>"]});
+const TP=[['Sommer','VL'],['Sommer','VR'],['Sommer','HL'],['Sommer','HR'],['Winter','VL'],['Winter','VR'],['Winter','HL'],['Winter','HR']];
+TP.forEach(([s,p],i)=>{const c=document.createElement('div');c.className='card';c.innerHTML=`<div class="l">${s} · ${p}</div><input id="tp_${i}" placeholder="Sensor-ID (Hex)" maxlength="8" style="width:100%;margin-top:6px;text-transform:uppercase">`;$('tps').appendChild(c)});
+const tpGet=()=>TP.map((_,i)=>$('tp_'+i).value.trim().toUpperCase());
+function tpSet(a){a.forEach((v,i)=>$('tp_'+i).value=v||'')}
+try{const s=JSON.parse(localStorage.getItem('gr_tpms')||'null');if(s){tpSet(s.ids);['tpf','tpr','tpw'].forEach(k=>$(k).value=s[k])}}catch(e){}
+function tpStore(){localStorage.setItem('gr_tpms',JSON.stringify({ids:tpGet(),tpf:$('tpf').value,tpr:$('tpr').value,tpw:$('tpw').value}))}
+['tpf','tpr','tpw'].forEach(k=>$(k).onchange=tpStore);
+TP.forEach((_,i)=>$('tp_'+i).onchange=()=>{const v=$('tp_'+i).value.trim();if(v&&!/^[0-9a-fA-F]{6,8}$/.test(v))alert('ID muss 6–8 Hex-Zeichen haben');tpStore()});
+$('tpsave').onclick=()=>{tpStore();if(!DB)return $('tpm').textContent='Lokal gespeichert (Datenbank nicht verfügbar).';const t=Date.now();tpGet().forEach((v,i)=>{if(v)DB.run('INSERT INTO tpms(t,satz,pos,sensor_id) VALUES(?,?,?,?)',[t,TP[i][0],TP[i][1],v])});saveDB();$('tpm').textContent='Gespeichert.'};
+$('tpload').onclick=()=>{if(!DB)return;const r=DB.exec("SELECT satz,pos,sensor_id FROM tpms WHERE t=(SELECT MAX(t) FROM tpms)");if(!r.length)return $('tpm').textContent='Keine Daten.';const a=TP.map(([s,p])=>{const x=r[0].values.find(v=>v[0]==s&&v[1]==p);return x?x[2]:''});tpSet(a);tpStore();$('tpm').textContent='Geladen.'};
+$('tpr2').onclick=async()=>{if(!mode)return alert('Nicht verbunden');const c=$('tpc').value.replace(/\s/g,'').toUpperCase(),h=$('tph').value.trim();
+ if(!/^(22|19)[0-9A-F]{2,}$/.test(c)||c.length%2)return alert('Nur Lesedienste 22xxxx oder 19xx erlaubt (gerade Anzahl Hex-Zeichen).');
+ if(h&&!/^[0-9A-Fa-f]{3}$/.test(h))return alert('Header: 3 Hex-Zeichen');
+ if(h)await q('ATSH'+h);const r=await q(c);if(h)await q('ATD'),await q('ATSP0');$('tpo').textContent=r};
+
+let DB=null,lastRes=null;
+const idb=()=>new Promise((res,rej)=>{const r=indexedDB.open('gryaris',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+async function saveDB(){if(!DB)return;try{const d=await idb();d.transaction('f','readwrite').objectStore('f').put(DB.export(),'db')}catch(e){}}
+async function loadStored(){try{const d=await idb();return await new Promise(r=>{const q=d.transaction('f').objectStore('f').get('db');q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})}catch(e){return null}}
+const SCHEMA=`CREATE TABLE IF NOT EXISTS sessions(id INTEGER PRIMARY KEY AUTOINCREMENT,started INTEGER,mode TEXT,note TEXT);
+CREATE TABLE IF NOT EXISTS samples(session_id INTEGER,t INTEGER,k TEXT,v REAL);
+CREATE INDEX IF NOT EXISTS ix_s ON samples(session_id,k,t);
+CREATE TABLE IF NOT EXISTS profiles(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,created INTEGER,json TEXT);
+CREATE TABLE IF NOT EXISTS tpms(id INTEGER PRIMARY KEY AUTOINCREMENT,t INTEGER,satz TEXT,pos TEXT,sensor_id TEXT);
+CREATE TABLE IF NOT EXISTS dtc_log(id INTEGER PRIMARY KEY AUTOINCREMENT,t INTEGER,code TEXT,descr TEXT);`;
+(async()=>{try{const SQL=await initSqlJs({locateFile:f=>'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/'+f});
+ const st=await loadStored();DB=st?new SQL.Database(st):new SQL.Database();DB.run(SCHEMA);window.SQLJS=SQL;$('dbs').textContent='Bereit.'}
+ catch(e){$('dbs').textContent='sql.js konnte nicht geladen werden (Internetverbindung nötig): '+e.message}})();
+function runSQL(sql){if(!DB)return alert('Datenbank nicht verfügbar');
+ try{const r=DB.exec(sql);lastRes=r[0]||null;$('qm').textContent=r.length?r[0].values.length+' Zeilen':'OK ('+DB.getRowsModified()+' geändert)';
+  $('qo').innerHTML=r.length?'<table><tr>'+r[0].columns.map(c=>`<th>${c}</th>`).join('')+'</tr>'+r[0].values.slice(0,1000).map(v=>'<tr>'+v.map(x=>`<td>${String(x).replace(/</g,'&lt;')}</td>`).join('')+'</tr>').join('')+'</table>':'–';saveDB()}
+ catch(e){$('qo').textContent='Fehler: '+e.message}}
+$('qr').onclick=()=>$('sq').value=$('qs').value;$('qx').onclick=()=>runSQL($('sq').value);
+$('qc').onclick=()=>{if(!lastRes)return alert('Erst eine Abfrage ausführen.');dl('abfrage.csv',lastRes.columns.join(';')+'\n'+lastRes.values.map(r=>r.join(';')).join('\n'))};
+$('ql').onclick=()=>{if(!lastRes||!lastRes.columns.includes('json')){return alert('Abfrage "Gespeicherte Profile" ausführen; die erste Zeile wird geladen.')}try{loadProfile(JSON.parse(lastRes.values[0][lastRes.columns.indexOf('json')]));show('tune')}catch(e){alert('Fehler: '+e.message)}};
+$('dbp').onclick=()=>{if(!DB)return;const n=prompt('Profilname:','Profil '+new Date().toLocaleString());if(n){DB.run('INSERT INTO profiles(name,created,json) VALUES(?,?,?)',[n,Date.now(),JSON.stringify(profile())]);saveDB();runSQL('SELECT id,name,datetime(created/1000,\'unixepoch\') created,json FROM profiles ORDER BY id DESC')}};
+$('dbx').onclick=()=>{if(!DB)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([DB.export()]));a.download='gryaris.sqlite';a.click()};
+$('dbi').onchange=async e=>{try{DB=new window.SQLJS.Database(new Uint8Array(await e.target.files[0].arrayBuffer()));DB.run(SCHEMA);saveDB();runSQL('SELECT * FROM sessions')}catch(x){alert('Ungültige Datenbank')}};
+$('dbd').onclick=()=>{if(DB&&confirm('Alle Aufzeichnungen und Profile löschen?')){DB.run('DELETE FROM samples;DELETE FROM sessions;DELETE FROM profiles;DELETE FROM dtc_log;');saveDB();$('qo').textContent='Gelöscht.'}};
+</script>
+</body>
+</html>
